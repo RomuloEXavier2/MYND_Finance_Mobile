@@ -1,0 +1,7 @@
+streamlit
+audio-recorder-streamlit
+openai
+python-dotenv
+gspread
+oauth2client
+pandas

@@ -1,0 +1,17 @@
+# --- SEGURANÇA (CRÍTICO) ---
+.env
+credentials.json
+client_secret.json
+
+# --- LIXO DE COMPILAÇÃO (O que causou o erro) ---
+build/
+dist/
+*.spec
+
+# --- PYTHON & IDE ---
+__pycache__/
+.venv/
+venv/
+.idea/
+.vscode/
+*.pyc
