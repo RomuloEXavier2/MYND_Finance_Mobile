@@ -1,7 +1,11 @@
 streamlit
 audio-recorder-streamlit
+streamlit-lottie
+plotly
 openai
 python-dotenv
 gspread
 oauth2client
 pandas
+requests
+elevenlabs
