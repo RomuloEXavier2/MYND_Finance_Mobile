@@ -18,7 +18,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="MYND Finance", page_icon="assets/logo_header.png", layout="wide")
 
 
-# --- ASSETS ---
+# --- FUNÇÕES DE IMAGEM ---
 def get_base64_of_bin_file(bin_file):
     try:
         with open(bin_file, 'rb') as f:
@@ -28,37 +28,39 @@ def get_base64_of_bin_file(bin_file):
         return ""
 
 
+# Carrega Imagens
 bg_img = get_base64_of_bin_file("assets/bg_mobile.png")
 carie_img = get_base64_of_bin_file("assets/carie.png")
 logo_img = get_base64_of_bin_file("assets/logo_header.png")
 
-# --- CSS GERAL (BLACK PIANO PADRÃO) ---
-st.markdown("""
+# --- CSS SUPREMO (CORRIGIDO) ---
+# Usamos f-string. Note que chaves do CSS agora são duplas {{ }} para não confundir o Python.
+st.markdown(f"""
     <style>
-    /* 1. Fundo Geral PRETO (Padrão para Dashboard) */
-    .stApp {
+    /* 1. Fundo Geral PRETO */
+    .stApp {{
         background-color: #000000 !important;
         color: #e0e0e0;
-    }
+    }}
 
     /* Remove barras */
-    header, footer {visibility: hidden;}
-    .block-container {
+    header, footer {{visibility: hidden;}}
+    .block-container {{
         padding-top: 10px;
-        padding-bottom: 120px; /* Espaço mic */
+        padding-bottom: 120px;
         padding-left: 5px;
         padding-right: 5px;
-    }
+    }}
 
     /* 2. Abas Estilizadas */
-    .stTabs [data-baseweb="tab-list"] {
+    .stTabs [data-baseweb="tab-list"] {{
         gap: 8px;
         background-color: transparent;
         border-bottom: 1px solid #222;
         padding-bottom: 10px;
         justify-content: center;
-    }
-    .stTabs [data-baseweb="tab"] {
+    }}
+    .stTabs [data-baseweb="tab"] {{
         height: 40px;
         background-color: #111;
         border-radius: 20px;
@@ -66,16 +68,16 @@ st.markdown("""
         font-size: 14px;
         border: 1px solid #333;
         padding: 0 20px;
-    }
-    .stTabs [aria-selected="true"] {
+    }}
+    .stTabs [aria-selected="true"] {{
         background-color: #000 !important;
         border: 1px solid #00E5FF !important;
         color: #00E5FF !important;
         box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
-    }
+    }}
 
-    /* 3. Avatar Carie (Ajuste de Posição) */
-    .chat-avatar {
+    /* 3. Avatar Carie (CSS Injetado com f-string) */
+    .chat-avatar {{
         width: 55px;
         height: 55px;
         border-radius: 50%;
@@ -83,41 +85,39 @@ st.markdown("""
         flex-shrink: 0;
         border: 2px solid #00E5FF;
         box-shadow: 0 0 12px rgba(0,229,255,0.4);
-        /* CORREÇÃO DA IMAGEM CORTADA */
-        background-image: url("data:image/png;base64,%s");
+        background-image: url("data:image/png;base64,{carie_img}");
         background-size: cover; 
-        background-position: center top; /* Tenta focar no rosto */
+        background-position: center top; 
         background-repeat: no-repeat;
-    }
+    }}
 
-    /* 4. Microfone Fixo (Centralização Robusta) */
-    .fixed-mic-wrapper {
+    /* 4. Microfone Fixo */
+    .fixed-mic-wrapper {{
         position: fixed;
         bottom: 20px;
         left: 0;
         width: 100%;
         display: flex;
-        justify-content: center; /* Garante centro absoluto */
+        justify-content: center;
         z-index: 9999;
-        pointer-events: none; /* Deixa clicar atrás se não for no botão */
-    }
-    .mic-btn-style {
-        pointer-events: auto; /* Reativa clique no botão */
+        pointer-events: none;
+    }}
+    .mic-btn-style {{
+        pointer-events: auto;
         background: black;
         border-radius: 50%;
         padding: 10px;
-        box-shadow: 0 0 25px #00E5FF; /* Brilho Neon */
+        box-shadow: 0 0 25px #00E5FF;
         border: 2px solid #00E5FF;
-    }
+    }}
 
-    /* Esconde background do iframe do gravador */
-    iframe[title="audio_recorder_streamlit.audio_recorder"] {
+    iframe[title="audio_recorder_streamlit.audio_recorder"] {{
         background: transparent !important;
-    }
+    }}
     </style>
-    """ % carie_img, unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
-# --- CLIENTES ---
+# --- CLIENTES API ---
 api_key = st.secrets.get("OPENAI_API_KEY")
 client_ai = OpenAI(api_key=api_key)
 
@@ -190,7 +190,6 @@ def transcrever(audio_bytes):
 def falar(texto):
     if not AUDIO_AVAILABLE: return None
     try:
-        # Tente usar um voice_id diferente se o atual estiver mudo
         voice_id = "EXAVITQu4vr4xnSDxMaL"
         audio = client_eleven.text_to_speech.convert(voice_id=voice_id, text=texto, model_id="eleven_multilingual_v2")
         return b"".join(chunk for chunk in audio)
@@ -232,8 +231,7 @@ tab1, tab2 = st.tabs(["💬 CARIE", "📊 DASHBOARD"])
 
 # --- ABA 1: CARIE ---
 with tab1:
-    # 1. Background APENAS nesta aba (Injeção de Div Fixa)
-    # Ajuste de tamanho: background-size: 85% (Reduzido como pediu)
+    # 1. Background APENAS nesta aba
     st.markdown(f"""
     <div style="
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -283,16 +281,15 @@ with tab1:
                 </div>
                 """, unsafe_allow_html=True)
 
-    st.write("##")  # Espaço
+    st.write("##")
 
-    # 3. Microfone Fixo no Rodapé (Container Flex)
-    # A classe 'fixed-mic-wrapper' garante centralização
+    # 3. Microfone Fixo
     st.markdown('<div class="fixed-mic-wrapper"><div class="mic-btn-style">', unsafe_allow_html=True)
     audio_bytes = audio_recorder(
         text="",
         recording_color="#ff0055",
         neutral_color="#00E5FF",
-        icon_size="3x",  # Tamanho do ícone
+        icon_size="3x",
         key="mic_carie"
     )
     st.markdown('</div></div>', unsafe_allow_html=True)
@@ -306,10 +303,7 @@ with tab1:
                 txt = transcrever(audio_bytes)
 
             if txt and len(txt) > 2:
-                # Adiciona User
                 st.session_state.msgs.append({"role": "user", "content": txt})
-
-                # Processa
                 dados = processar_gpt(txt)
 
                 if dados.get("cancelar"):
@@ -326,7 +320,7 @@ with tab1:
                         if not dp.get("item"):
                             falta = "O que você comprou?"
                         elif not dp.get("valor"):
-                            falta = "Qual o valor?"
+                            falta = "Qual foi o valor?"
 
                     if falta:
                         resp = falta
@@ -339,28 +333,18 @@ with tab1:
                         else:
                             resp = f"Erro: {msg}"
 
-                # Resposta Carie
                 st.session_state.msgs.append({"role": "carie", "content": resp})
-
-                # Áudio Resposta
                 mp3 = falar(resp)
                 if mp3:
-                    # Autoplay via HTML oculto para garantir execução
                     b64 = base64.b64encode(mp3).decode()
-                    md = f"""
-                        <audio autoplay="true">
-                        <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
-                        </audio>
-                        """
+                    md = f"""<audio autoplay="true"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>"""
                     st.markdown(md, unsafe_allow_html=True)
 
                 st.rerun()
 
-# --- ABA 2: DASHBOARD (Black Piano Puro) ---
+# --- ABA 2: DASHBOARD ---
 with tab2:
     st_autorefresh(interval=30000, key="dash")
-    # Aqui não tem a div de background, então fica preto do stApp
-
     df = carregar_dados()
     if not df.empty:
         try:
@@ -370,7 +354,6 @@ with tab2:
 
             total = df['Valor'].sum()
 
-            # Card KPI
             st.markdown(f"""
             <div style="background:#080808; border:1px solid #333; padding:20px; border-radius:15px; text-align:center; margin-bottom:20px;">
                 <span style="color:#888; font-size:14px;">SALDO TOTAL</span><br>
@@ -378,7 +361,6 @@ with tab2:
             </div>
             """, unsafe_allow_html=True)
 
-            # Gráficos
             c1, c2 = st.columns(2)
             with c1:
                 fig = px.bar(df.groupby("Categoria")["Valor"].sum().reset_index(), x="Categoria", y="Valor",
