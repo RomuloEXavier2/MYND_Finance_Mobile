@@ -1,6 +1,7 @@
 streamlit
 audio-recorder-streamlit
 streamlit-lottie
+streamlit-autorefresh
 plotly
 openai
 python-dotenv
@@ -9,4 +10,3 @@ oauth2client
 pandas
 requests
 elevenlabs
-streamlit-autorefresh  <-- NOVO
