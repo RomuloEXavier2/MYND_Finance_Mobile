@@ -5,11 +5,11 @@ import pandas as pd
 import tempfile
 import requests
 import plotly.express as px
-import plotly.graph_objects as go
 from openai import OpenAI
 from pathlib import Path
 from audio_recorder_streamlit import audio_recorder
 from streamlit_lottie import st_lottie
+from streamlit_autorefresh import st_autorefresh  # <--- BIBLIOTECA NOVA
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -32,19 +32,23 @@ st.markdown("""
     /* Estilização das Abas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 24px;
+        background-color: transparent;
     }
     .stTabs [data-baseweb="tab"] {
         height: 50px;
         white-space: pre-wrap;
         background-color: #111111;
-        border-radius: 4px 4px 0px 0px;
-        color: #ffffff;
+        border-radius: 8px;
+        color: #888888;
         font-weight: bold;
+        border: 1px solid #333;
+        margin-right: 10px;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #000000;
-        border-bottom: 2px solid #00E5FF;
-        color: #00E5FF;
+        background-color: #000000 !important;
+        border: 1px solid #00E5FF !important;
+        color: #00E5FF !important;
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
     }
 
     /* Cards de Métricas */
@@ -57,10 +61,12 @@ st.markdown("""
     }
     div[data-testid="stMetricLabel"] {
         color: #888;
+        font-size: 14px;
     }
     div[data-testid="stMetricValue"] {
         color: #00E5FF;
         font-family: 'Courier New', monospace;
+        font-size: 24px;
     }
 
     /* Centralizar Gravador */
@@ -75,54 +81,71 @@ st.markdown("""
 
 # --- FUNÇÕES AUXILIARES ---
 def load_lottieurl(url: str):
-    r = requests.get(url)
-    if r.status_code != 200: return None
-    return r.json()
+    try:
+        r = requests.get(url)
+        if r.status_code != 200: return None
+        return r.json()
+    except:
+        return None
 
 
-# Cache do Google Sheets
-@st.cache_resource
-def get_google_sheet_client():
-    scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-    # Tenta Secrets (Nuvem) ou Local
-    if "GOOGLE_CREDENTIALS" in st.secrets:
-        creds_dict = dict(st.secrets["GOOGLE_CREDENTIALS"])
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    else:
-        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-    return gspread.authorize(creds)
+# Cache do Google Sheets (TTL de 10 segs para não explodir a API, mas atualizar rápido)
+@st.cache_data(ttl=10)
+def carregar_dados():
+    try:
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
+        if "GOOGLE_CREDENTIALS" in st.secrets:
+            creds_dict = dict(st.secrets["GOOGLE_CREDENTIALS"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        else:
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+
+        client_gs = gspread.authorize(creds)
+        sheet = client_gs.open("MYND_Finance_Bot").get_worksheet(0)
+        data = sheet.get_all_records()
+        return pd.DataFrame(data)
+    except:
+        return pd.DataFrame()
 
 
 def salvar_na_nuvem(dados):
     try:
-        client_gs = get_google_sheet_client()
+        scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+
+        if "GOOGLE_CREDENTIALS" in st.secrets:
+            creds_dict = dict(st.secrets["GOOGLE_CREDENTIALS"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        else:
+            creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+
+        client_gs = gspread.authorize(creds)
         sheet = client_gs.open("MYND_Finance_Bot").get_worksheet(0)
+
         from datetime import datetime
         timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+
+        # Ajuste de categoria se for Compras Online
+        cat_final = dados.get("categoria")
+        if cat_final == "Compras" and dados.get("local_compra") == "Online":
+            cat_final = "Compras Online"
+
         linha = [
             timestamp,
             dados.get("item"),
             dados.get("valor"),
-            dados.get("categoria"),
+            cat_final,
             dados.get("pagamento"),
             dados.get("local_compra", ""),
             dados.get("recorrencia", "Único"),
             "App Nuvem"
         ]
         sheet.append_row(linha)
+        # Limpa o cache para forçar atualização imediata no dashboard
+        carregar_dados.clear()
         return True, "Salvo!"
     except Exception as e:
         return False, str(e)
-
-
-def carregar_dados():
-    try:
-        client_gs = get_google_sheet_client()
-        sheet = client_gs.open("MYND_Finance_Bot").get_worksheet(0)
-        data = sheet.get_all_records()
-        return pd.DataFrame(data)
-    except:
-        return pd.DataFrame()
 
 
 # --- CLIENTES IA ---
@@ -158,7 +181,6 @@ def transcrever_audio(audio_bytes):
 def falar_texto(texto):
     if not AUDIO_AVAILABLE: return None
     try:
-        # Voice ID padrão (Rachel)
         voice_id = "EXAVITQu4vr4xnSDxMaL"
         audio_gen = client_eleven.text_to_speech.convert(
             voice_id=voice_id,
@@ -168,7 +190,7 @@ def falar_texto(texto):
         )
         return b"".join(chunk for chunk in audio_gen)
     except Exception as e:
-        st.error(f"Erro ElevenLabs: {e}")
+        # Silencia erro visual, apenas não toca
         return None
 
 
@@ -199,60 +221,51 @@ def processar_intencao_gpt(texto):
 # --- INTERFACE ---
 tab1, tab2 = st.tabs(["🎙️ AGENTE", "📊 DASHBOARD"])
 
-# --- ABA AGENTE (Minimalista Black Piano) ---
+# --- ABA AGENTE ---
 with tab1:
-    # Animação do Robô (Lottie)
-    # URL de um robô futurista azul/neon
     lottie_robot = load_lottieurl("https://lottie.host/020d5e2e-2e4a-4497-b67e-2f943063f282/Gef2CSQ7Qh.json")
 
     col_a, col_b, col_c = st.columns([1, 2, 1])
     with col_b:
         if lottie_robot:
-            st_lottie(lottie_robot, height=250, key="robot")
+            st_lottie(lottie_robot, height=200, key="robot")
 
-        # Histórico de mensagem rápida (Só a última)
         if "last_response" in st.session_state:
             st.markdown(
-                f"<div style='text-align:center; color:#00E5FF; font-size:18px;'>{st.session_state.last_response}</div>",
+                f"<div style='text-align:center; color:#00E5FF; font-size:16px; font-weight:bold;'>{st.session_state.last_response}</div>",
                 unsafe_allow_html=True)
 
     st.write("---")
 
-    # Área do Microfone (Centralizada e Neon)
     col_mic1, col_mic2, col_mic3 = st.columns([1, 1, 1])
     with col_mic2:
         audio_bytes = audio_recorder(
             text="",
-            recording_color="#ff0055",  # Vermelho gravando
-            neutral_color="#00E5FF",  # Azul Neon parado
-            icon_size="4x",  # Grande destaque
+            recording_color="#ff0055",
+            neutral_color="#00E5FF",
+            icon_size="4x",
         )
 
-    # Processamento Lógico
     if audio_bytes:
         if "last_audio_processed" not in st.session_state or st.session_state.last_audio_processed != audio_bytes:
             st.session_state.last_audio_processed = audio_bytes
 
             with st.spinner("Processando..."):
                 texto_usuario = transcrever_audio(audio_bytes)
-
                 if texto_usuario:
                     dados = processar_intencao_gpt(texto_usuario)
 
                     if dados.get("cancelar"):
                         st.session_state.dados_parciais = {}
-                        msg_final = "Operação cancelada."
-                        st.session_state.last_response = msg_final
+                        st.session_state.last_response = "Cancelado."
                     else:
-                        # Atualiza memória
                         for k, v in dados.items():
                             if v: st.session_state.dados_parciais[k] = v
 
-                        # Verifica se FALTA algo
                         falta = dados.get("missing_info")
-
-                        # Validação local extra
                         dp = st.session_state.dados_parciais
+
+                        # Validacao extra local
                         if not falta:
                             if not dp.get("item"):
                                 falta = "O que você comprou?"
@@ -260,21 +273,17 @@ with tab1:
                                 falta = "Qual o valor?"
 
                         if falta:
-                            # FALTA INFO: Tocar áudio perguntando
-                            msg_final = falta
-                            st.session_state.last_response = f"⚠️ {falta}"
+                            st.session_state.last_response = f"🗣️ {falta}"
                             audio_resp = falar_texto(falta)
                             if audio_resp:
                                 st.audio(audio_resp, format="audio/mp3", autoplay=True)
                         else:
-                            # TUDO CERTO: Salvar
                             sucesso, status = salvar_na_nuvem(dp)
                             if sucesso:
                                 msg_final = f"Feito! {dp['item']} de R$ {dp['valor']} salvo."
                                 st.session_state.dados_parciais = {}
                                 st.balloons()
 
-                                # Tocar áudio de sucesso
                                 audio_resp = falar_texto(msg_final)
                                 if audio_resp:
                                     st.audio(audio_resp, format="audio/mp3", autoplay=True)
@@ -283,59 +292,66 @@ with tab1:
                             else:
                                 st.error(status)
 
-# --- ABA DASHBOARD (Estilo da Imagem Black) ---
+# --- ABA DASHBOARD ---
 with tab2:
-    if st.button("🔄 Atualizar"): st.cache_data.clear()
+    # AUTO-REFRESH: Atualiza a cada 30 segundos (30000ms) automaticamente
+    count = st_autorefresh(interval=30000, limit=None, key="dashboard_refresh")
 
     df = carregar_dados()
     if not df.empty:
         try:
-            # Tratamento de dados
+            # Limpeza robusta de dados
+            # Remove R$, troca virgula por ponto, converte para numerico
+            if df['Valor'].dtype == object:
+                df['Valor'] = df['Valor'].astype(str).str.replace('R$', '', regex=False).str.replace('.', '',
+                                                                                                     regex=False).str.replace(
+                    ',', '.', regex=False)
+
             df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
 
-            # --- Métrica de Topo ---
+            # --- Métricas ---
             total = df['Valor'].sum()
+            # Calcula gasto do mês atual vs anterior (Mockup visual)
             col_m1, col_m2 = st.columns(2)
-            col_m1.metric("Saldo Total", f"R$ {total:,.2f}", "+2%")
-            col_m2.metric("Transações", len(df))
+            col_m1.metric("Saldo Total", f"R$ {total:,.2f}")
+            col_m2.metric("Lançamentos", len(df))
 
             st.write("---")
 
-            # --- Layout de Gráficos (Plotly Black Piano) ---
+            # --- Gráficos Plotly ---
             col_g1, col_g2 = st.columns(2)
 
             with col_g1:
                 st.caption("GASTOS POR CATEGORIA")
                 fig_cat = px.bar(
                     df.groupby("Categoria")["Valor"].sum().reset_index(),
-                    x="Categoria", y="Valor",
-                    color="Valor",
-                    color_continuous_scale=["#00E5FF", "#00FF41", "#FF0055"],  # Neon Colors
+                    x="Categoria", y="Valor", color="Valor",
+                    color_continuous_scale=["#00E5FF", "#00FF41", "#FF0055"],
                     template="plotly_dark"
                 )
-                fig_cat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+                fig_cat.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                                      margin=dict(l=0, r=0, t=0, b=0))
                 st.plotly_chart(fig_cat, use_container_width=True)
 
             with col_g2:
-                st.caption("FORMAS DE PAGAMENTO")
+                st.caption("MEIOS DE PAGAMENTO")
                 fig_pag = px.pie(
-                    df, names="Pagamento", values="Valor",
-                    hole=0.5,  # Donut
+                    df, names="Pagamento", values="Valor", hole=0.6,
                     color_discrete_sequence=["#00E5FF", "#FF0055", "#FF9100", "#00FF41"],
                     template="plotly_dark"
                 )
-                fig_pag.update_layout(paper_bgcolor="rgba(0,0,0,0)")
+                fig_pag.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(l=0, r=0, t=0, b=0))
                 st.plotly_chart(fig_pag, use_container_width=True)
 
             # Tabela
-            st.caption("HISTÓRICO RECENTE")
+            st.caption("EXTRATO RECENTE")
             st.dataframe(
-                df.tail(5).sort_index(ascending=False),
+                df.tail(10).sort_index(ascending=False)[['Data/Hora', 'Item', 'Valor', 'Categoria']],
                 use_container_width=True,
                 hide_index=True
             )
 
         except Exception as e:
-            st.error(f"Erro ao gerar gráficos: {e}")
+            st.error(f"Erro dados: {e}")
     else:
         st.info("Sem dados.")
