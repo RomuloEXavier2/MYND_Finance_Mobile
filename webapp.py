@@ -117,8 +117,8 @@ st.markdown(f"""
 
         /* AJUSTE FINO DE POSIÇÃO DO ÍCONE */
         /* Mexa nestes valores se ainda estiver torto */
-        padding-top: 10px !important;
-        padding-left: 5px !important;
+        padding-top: 15px !important;
+        padding-left: 10px !important;
     }}
     </style>
     """, unsafe_allow_html=True)
