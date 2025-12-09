@@ -18,7 +18,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 st.set_page_config(page_title="MYND Finance", page_icon="assets/logo_header.png", layout="wide")
 
 
-# --- FUNÇÕES DE IMAGEM ---
+# --- ASSETS ---
 def get_base64_of_bin_file(bin_file):
     try:
         with open(bin_file, 'rb') as f:
@@ -28,101 +28,101 @@ def get_base64_of_bin_file(bin_file):
         return ""
 
 
-# Carrega Imagens (Cache simples para não recarregar disco toda vez)
 bg_img = get_base64_of_bin_file("assets/bg_mobile.png")
-carie_img = get_base64_of_bin_file("assets/carie.png")
+# Não precisamos carregar carie_img em base64 para o st.chat_message, usamos o path direto ou Image object
+# Mas mantemos aqui caso precise pro CSS
+carie_icon_path = "assets/carie.png"
 logo_img = get_base64_of_bin_file("assets/logo_header.png")
 
-# --- CSS SUPREMO (CORRIGIDO E ESTABILIZADO) ---
+# --- CSS SUPREMO (REFATORADO PARA DESIGN LIMPO) ---
 st.markdown(f"""
     <style>
-    /* 1. Fundo Geral Estabilizado (Aplica na raiz do App para não piscar) */
+    /* 1. Fundo Geral */
     .stApp {{
         background-color: #000000;
         background-image: url("data:image/png;base64,{bg_img}");
         background-size: cover;
         background-position: center;
-        background-repeat: no-repeat;
         background-attachment: fixed;
     }}
 
-    /* Remove barras */
+    /* Remove elementos padrão */
     header, footer {{visibility: hidden;}}
     .block-container {{
-        padding-top: 10px;
-        padding-bottom: 120px;
-        padding-left: 5px;
-        padding-right: 5px;
+        padding-top: 20px;
+        padding-bottom: 150px; /* Espaço generoso para o mic */
+        max-width: 800px; /* Limita largura no PC para parecer app mobile */
     }}
 
-    /* 2. Abas Estilizadas */
+    /* 2. Abas Modernas (Estilo Reference) */
     .stTabs [data-baseweb="tab-list"] {{
-        gap: 8px;
-        background-color: rgba(0,0,0,0.8); /* Fundo semi-transparente nas abas */
-        border-bottom: 1px solid #222;
-        padding-bottom: 10px;
-        justify-content: center;
+        gap: 10px;
+        background-color: rgba(0,0,0,0.5);
+        padding: 10px;
         border-radius: 15px;
-        margin-bottom: 20px;
+        border: 1px solid #333;
     }}
     .stTabs [data-baseweb="tab"] {{
         height: 40px;
-        background-color: #111;
-        border-radius: 20px;
-        color: #666;
-        font-size: 14px;
-        border: 1px solid #333;
-        padding: 0 20px;
+        background-color: transparent;
+        color: #888;
+        font-weight: 600;
+        border: none;
     }}
     .stTabs [aria-selected="true"] {{
-        background-color: #000 !important;
-        border: 1px solid #00E5FF !important;
+        background-color: #111 !important;
         color: #00E5FF !important;
-        box-shadow: 0 0 10px rgba(0, 229, 255, 0.4);
+        border-radius: 10px;
+        border: 1px solid #00E5FF !important;
     }}
 
-    /* 3. Avatar Carie */
-    .chat-avatar {{
-        width: 55px;
-        height: 55px;
-        border-radius: 50%;
-        margin-right: 12px;
-        flex-shrink: 0;
-        border: 2px solid #00E5FF;
-        box-shadow: 0 0 12px rgba(0,229,255,0.4);
-        background-image: url("data:image/png;base64,{carie_img}");
-        background-size: cover; 
-        background-position: center top; 
-        background-repeat: no-repeat;
+    /* 3. Ajuste das Mensagens de Chat (Native) */
+    /* Deixa o fundo das mensagens do assistente um pouco mais claro que o fundo */
+    .stChatMessage {{
+        background-color: rgba(20, 20, 20, 0.8);
+        border: 1px solid #333;
+        border-radius: 15px;
+        margin-bottom: 10px;
+    }}
+    /* Mensagem do usuário com destaque sutil */
+    div[data-testid="chatAvatarIcon-user"] {{
+        background-color: #00E5FF !important;
+        color: black !important;
     }}
 
-    /* 4. Microfone Fixo */
+    /* 4. Microfone Flutuante (Design Limpo) */
     .fixed-mic-wrapper {{
         position: fixed;
-        bottom: 20px;
+        bottom: 30px;
         left: 0;
         width: 100%;
         display: flex;
         justify-content: center;
         z-index: 9999;
-        pointer-events: none;
+        pointer-events: none; /* Permite clique através da área vazia */
     }}
     .mic-btn-style {{
         pointer-events: auto;
-        background: black;
+        background: rgba(0, 0, 0, 0.9); /* Fundo quase preto */
         border-radius: 50%;
-        padding: 10px;
-        box-shadow: 0 0 25px #00E5FF;
+        padding: 15px;
+        box-shadow: 0 0 30px rgba(0, 229, 255, 0.3); /* Glow Azul Suave */
         border: 2px solid #00E5FF;
+        transition: transform 0.2s;
+    }}
+    .mic-btn-style:active {{
+        transform: scale(0.95);
+        box-shadow: 0 0 50px rgba(0, 229, 255, 0.6);
     }}
 
+    /* Esconde iframe do gravador */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {{
         background: transparent !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- CLIENTES API ---
+# --- CLIENTES ---
 api_key = st.secrets.get("OPENAI_API_KEY")
 client_ai = OpenAI(api_key=api_key)
 
@@ -136,7 +136,7 @@ except:
     AUDIO_AVAILABLE = False
 
 
-@st.cache_data(ttl=60)  # Aumentei TTL para performance
+@st.cache_data(ttl=60)
 def carregar_dados():
     try:
         scope = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
@@ -147,10 +147,8 @@ def carregar_dados():
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client_gs = gspread.authorize(creds)
         sheet = client_gs.open("MYND_Finance_Bot").get_worksheet(0)
-        data = sheet.get_all_records()
-        return pd.DataFrame(data)
-    except Exception as e:
-        print(f"Erro ao carregar dados: {e}")  # Log no terminal
+        return pd.DataFrame(sheet.get_all_records())
+    except:
         return pd.DataFrame()
 
 
@@ -174,12 +172,12 @@ def salvar_na_nuvem(dados):
                dados.get("local_compra", ""), dados.get("recorrencia", "Único"), "App Nuvem"]
         sheet.append_row(row)
         carregar_dados.clear()
-        return True, "Salvo com sucesso!"
+        return True, "Salvo!"
     except Exception as e:
         return False, str(e)
 
 
-# --- FUNÇÕES AUXILIARES ---
+# --- FUNÇÕES ---
 def transcrever(audio_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as fp:
         fp.write(audio_bytes)
@@ -204,12 +202,23 @@ def falar(texto):
         return None
 
 
+def processar_gpt(texto):
+    if "dados" not in st.session_state: st.session_state.dados = {}
+    ctx = f"Dados atuais: {json.dumps(st.session_state.dados, ensure_ascii=False)}"
+    prompt = f"""You are Carie (MYND). Extract data. {ctx}. User: "{texto}".
+    JSON: {{"item":null,"valor":null,"categoria":null,"pagamento":null,"recorrencia":"Único","local_compra":null,"missing_info":null,"cancelar":false}}
+    Rules: 'Compras' needs local_compra. If missing info, ASK in 'missing_info' (Portuguese)."""
+    try:
+        resp = client_ai.chat.completions.create(model="gpt-4-turbo", messages=[{"role": "system", "content": prompt}],
+                                                 response_format={"type": "json_object"})
+        return json.loads(resp.choices[0].message.content)
+    except:
+        return {}
+
+
 def limpar_moeda(valor):
-    """Função robusta para limpar formatos de moeda"""
     if isinstance(valor, str):
-        # Remove R$, espaços e converte , para .
         v = valor.replace('R$', '').replace(' ', '')
-        # Se tiver ponto como milhar (ex: 1.000,00), remove o ponto
         if '.' in v and ',' in v:
             v = v.replace('.', '').replace(',', '.')
         elif ',' in v:
@@ -218,164 +227,113 @@ def limpar_moeda(valor):
     return valor
 
 
-def processar_gpt(texto):
-    if "dados" not in st.session_state: st.session_state.dados = {}
-
-    # Contexto atual para o GPT saber o que já tem
-    ctx = json.dumps(st.session_state.dados, ensure_ascii=False)
-
-    prompt = f"""
-    You are Carie, a financial assistant.
-    Current Data Context: {ctx}
-    User Input: "{texto}"
-
-    Task: Extract financial data. Update the context.
-    JSON Output Format:
-    {{
-        "item": "string or null",
-        "valor": "float or null (format as number)",
-        "categoria": "string or null",
-        "pagamento": "string or null",
-        "recorrencia": "Único (default) or Mensal",
-        "local_compra": "string or null",
-        "missing_info": "string (Question in Portuguese if item, valor or pagamento are missing) or null",
-        "cancelar": boolean
-    }}
-    Rules: 
-    1. If user says 'cancelar', set "cancelar": true.
-    2. Check 'item', 'valor', 'pagamento'. If any is missing, set 'missing_info' to a polite question asking for it.
-    """
-
-    try:
-        resp = client_ai.chat.completions.create(
-            model="gpt-4-turbo",
-            messages=[{"role": "system", "content": prompt}],
-            response_format={"type": "json_object"}
-        )
-        return json.loads(resp.choices[0].message.content)
-    except:
-        return {}
-
-
 # --- SESSÃO ---
 if "msgs" not in st.session_state:
     st.session_state.msgs = [
-        {"role": "carie", "content": "Olá, eu sou a Carie! Sou sua assistente financeira."},
+        {"role": "assistant", "content": "Olá, sou a Carie! 🤖"},
+        {"role": "assistant", "content": "Sou sua assistente financeira. Pode falar!"}
     ]
 
-# --- UI ---
-# Header
+# --- UI HEADER ---
 st.markdown(f"""
-<div style="display:flex; align-items:center; justify-content:center; margin-bottom:10px;">
-    <img src="data:image/png;base64,{logo_img}" style="height:35px; margin-right:10px;">
-    <h3 style="color:#00E5FF; margin:0; font-family:sans-serif;">MYND Finance</h3>
+<div style="display:flex; align-items:center; justify-content:center; margin-bottom:20px;">
+    <img src="data:image/png;base64,{logo_img}" style="height:40px; margin-right:15px;">
+    <h2 style="color:#FFF; margin:0; font-family:'Roboto', sans-serif; font-weight:300; letter-spacing: 1px;">MYND <span style="color:#00E5FF; font-weight:bold;">Finance</span></h2>
 </div>
 """, unsafe_allow_html=True)
 
-tab1, tab2 = st.tabs(["💬 CARIE", "📊 DASHBOARD"])
+tab1, tab2 = st.tabs(["💬 AGENTE", "📊 DASHBOARD"])
 
-# --- ABA 1: CARIE ---
+# --- ABA 1: CHAT LIMPO (Reference Style) ---
 with tab1:
-    # (Removida a div de background que causava flickering - agora está no CSS global)
+    # Container para o Robô (Topo, estilo cartão)
+    with st.container():
+        lottie_robot = load_lottieurl("https://lottie.host/020d5e2e-2e4a-4497-b67e-2f943063f282/Gef2CSQ7Qh.json")
+        col_anim, col_info = st.columns([1, 2])
+        with col_anim:
+            if lottie_robot: st_lottie(lottie_robot, height=120, key="robot")
+        with col_info:
+            st.markdown("""
+            <div style="padding-top:20px;">
+                <p style="color:#888; font-size:12px; margin:0;">STATUS DO SISTEMA</p>
+                <p style="color:#00FF41; font-size:14px; font-weight:bold;">● ONLINE</p>
+                <p style="color:#ccc; font-size:14px;">"Estou ouvindo. Clique abaixo para registrar."</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-    # Chat
-    chat_box = st.container()
-    with chat_box:
+    st.markdown("---")  # Divisor sutil
+
+    # Container de Chat (Nativo do Streamlit)
+    chat_container = st.container()
+    with chat_container:
         for msg in st.session_state.msgs:
-            if msg["role"] == "carie":
-                st.markdown(f"""
-                <div style="display:flex; align-items:flex-start; margin-bottom:15px;">
-                    <div class="chat-avatar"></div>
-                    <div style="
-                        background: rgba(0, 50, 100, 0.7);
-                        color: #fff;
-                        padding: 12px 16px;
-                        border-radius: 0 15px 15px 15px;
-                        backdrop-filter: blur(4px);
-                        border: 1px solid rgba(0, 229, 255, 0.3);
-                        font-size: 14px;
-                        max-width: 75%;">
-                        {msg['content']}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                <div style="display:flex; justify-content:flex-end; margin-bottom:15px;">
-                    <div style="
-                        background: rgba(20, 20, 20, 0.9);
-                        color: #ddd;
-                        padding: 12px 16px;
-                        border-radius: 15px 0 15px 15px;
-                        border: 1px solid #333;
-                        font-size: 14px;
-                        max-width: 75%;">
-                        {msg['content']}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            # Define o avatar correto
+            avatar_icon = carie_icon_path if msg["role"] == "assistant" else None
 
+            with st.chat_message(msg["role"], avatar=avatar_icon):
+                st.write(msg["content"])
+
+    # Espaçador
+    st.write("##")
     st.write("##")
 
-    # Microfone
+    # MICROFONE (Fixo embaixo)
     st.markdown('<div class="fixed-mic-wrapper"><div class="mic-btn-style">', unsafe_allow_html=True)
     audio_bytes = audio_recorder(
         text="",
         recording_color="#ff0055",
         neutral_color="#00E5FF",
         icon_size="3x",
-        key="mic_carie"
+        key="mic_main"
     )
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # Lógica Principal
+    # Lógica de Processamento
     if audio_bytes:
         if "last_audio" not in st.session_state or st.session_state.last_audio != audio_bytes:
             st.session_state.last_audio = audio_bytes
 
-            with st.spinner("Carie ouvindo..."):
+            # 1. Transcreve
+            with st.spinner("Ouvindo..."):
                 txt = transcrever(audio_bytes)
 
             if txt and len(txt) > 2:
-                # 1. Registra fala do usuário
+                # Adiciona mensagem do usuário na hora
                 st.session_state.msgs.append({"role": "user", "content": txt})
 
-                # 2. Processa intenção
-                dados_gpt = processar_gpt(txt)
+                # Processa IA
+                dados = processar_gpt(txt)
+                resp = ""
 
-                resposta_carie = ""
-
-                if dados_gpt.get("cancelar"):
+                if dados.get("cancelar"):
                     st.session_state.dados = {}
-                    resposta_carie = "Tudo bem, cancelei a operação."
+                    resp = "Cancelado."
                 else:
-                    # Atualiza estado parcial
-                    for k, v in dados_gpt.items():
-                        if v and k != "missing_info":
-                            st.session_state.dados[k] = v
+                    for k, v in dados.items():
+                        if v: st.session_state.dados[k] = v
 
-                    falta = dados_gpt.get("missing_info")
+                    falta = dados.get("missing_info")
+
+                    if not falta:
+                        if not st.session_state.dados.get("item"):
+                            falta = "Item?"
+                        elif not st.session_state.dados.get("valor"):
+                            falta = "Valor?"
 
                     if falta:
-                        # Se faltar info, a resposta é a pergunta do GPT
-                        resposta_carie = falta
+                        resp = falta
                     else:
-                        # Se tiver tudo, tenta salvar
-                        ok, msg_salvo = salvar_na_nuvem(st.session_state.dados)
+                        ok, msg = salvar_na_nuvem(st.session_state.dados)
                         if ok:
-                            item_nome = st.session_state.dados.get('item', 'Item')
-                            val_nome = st.session_state.dados.get('valor', '0')
-                            resposta_carie = f"Certo! Salvei {item_nome} no valor de {val_nome} reais."
-                            st.session_state.dados = {}  # Limpa para próxima
+                            resp = f"Salvo: {st.session_state.dados['item']} (R$ {st.session_state.dados['valor']})"
+                            st.session_state.dados = {}
                             st.balloons()
                         else:
-                            resposta_carie = f"Houve um erro ao salvar: {msg_salvo}"
+                            resp = f"Erro: {msg}"
 
-                # 3. Adiciona resposta ao chat
-                st.session_state.msgs.append({"role": "carie", "content": resposta_carie})
-
-                # 4. GERA AUDIO (Correção Crítica: Ocorre SEMPRE que há resposta)
-                mp3 = falar(resposta_carie)
+                # Adiciona resposta e toca áudio
+                st.session_state.msgs.append({"role": "assistant", "content": resp})
+                mp3 = falar(resp)
                 if mp3:
                     b64 = base64.b64encode(mp3).decode()
                     md = f"""<audio autoplay="true"><source src="data:audio/mp3;base64,{b64}" type="audio/mp3"></audio>"""
@@ -383,36 +341,30 @@ with tab1:
 
                 st.rerun()
 
-# --- ABA 2: DASHBOARD ---
+# --- ABA 2: DASHBOARD (Mantido igual) ---
 with tab2:
-    st_autorefresh(interval=30000, key="dash")  # Refresh a cada 30s
-
+    st_autorefresh(interval=30000, key="dash")
     df = carregar_dados()
-
-    # Verificação defensiva de dados
-    if not df.empty and 'Valor' in df.columns and 'Categoria' in df.columns:
+    if not df.empty:
         try:
-            # Limpeza robusta
             df['Valor'] = df['Valor'].apply(limpar_moeda)
             df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
 
             total = df['Valor'].sum()
 
             st.markdown(f"""
-            <div style="background:rgba(0,0,0,0.6); border:1px solid #333; padding:20px; border-radius:15px; text-align:center; margin-bottom:20px; backdrop-filter: blur(5px);">
-                <span style="color:#888; font-size:14px;">SALDO GASTO TOTAL</span><br>
+            <div style="background:rgba(20,20,20,0.8); border:1px solid #333; padding:20px; border-radius:15px; text-align:center; margin-bottom:20px;">
+                <span style="color:#888; font-size:14px;">TOTAL GASTO</span><br>
                 <span style="color:#00E5FF; font-size:32px; font-family:monospace; font-weight:bold;">R$ {total:,.2f}</span>
             </div>
             """, unsafe_allow_html=True)
 
             c1, c2 = st.columns(2)
             with c1:
-                # Agrupamento seguro
-                df_cat = df.groupby("Categoria")["Valor"].sum().reset_index()
-                fig = px.bar(df_cat, x="Categoria", y="Valor",
+                fig = px.bar(df.groupby("Categoria")["Valor"].sum().reset_index(), x="Categoria", y="Valor",
                              color="Valor", template="plotly_dark", color_continuous_scale=["#00E5FF", "#FF0055"])
                 fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                  margin=dict(t=30, l=0, r=0, b=0), font=dict(color="#ddd"))
+                                  margin=dict(t=30, l=0, r=0, b=0), showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
             with c2:
                 fig = px.pie(df, names="Pagamento", values="Valor", hole=0.6, template="plotly_dark",
@@ -420,11 +372,10 @@ with tab2:
                 fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=30, l=0, r=0, b=0), showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
 
-            # Tabela Recente
-            st.markdown("##### Extrato Recente")
+            st.markdown("##### Extrato")
             st.dataframe(df.tail(10)[['Data/Hora', 'Item', 'Valor']], use_container_width=True, hide_index=True)
 
         except Exception as e:
-            st.error(f"Erro ao processar gráfico: {e}")
+            st.error(f"Erro: {e}")
     else:
-        st.info("Nenhum dado encontrado ou planilha vazia.")
+        st.info("Sem dados.")
