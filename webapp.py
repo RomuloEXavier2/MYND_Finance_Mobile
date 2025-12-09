@@ -28,13 +28,12 @@ def get_base64_of_bin_file(bin_file):
         return ""
 
 
-# Carrega imagens em memória
 bg_img = get_base64_of_bin_file("assets/bg_mobile.png")
 carie_icon_path = "assets/carie.png"
 logo_img = get_base64_of_bin_file("assets/logo_header.png")
 
 
-# --- FUNÇÕES AUXILIARES (Corrigido: Adicionada a função que faltava) ---
+# --- FUNÇÕES AUXILIARES ---
 def load_lottieurl(url: str):
     try:
         r = requests.get(url, timeout=5)
@@ -44,10 +43,10 @@ def load_lottieurl(url: str):
         return None
 
 
-# --- CSS SUPREMO (GLOBAL) ---
+# --- CSS SUPREMO ---
 st.markdown(f"""
     <style>
-    /* 1. Fundo Geral: PRETO PURO (Padrão para o Dashboard) */
+    /* 1. Fundo Geral */
     .stApp {{
         background-color: #000000 !important;
         color: #e0e0e0;
@@ -68,7 +67,7 @@ st.markdown(f"""
         padding: 10px;
         border-radius: 15px;
         border: 1px solid #333;
-        z-index: 10; /* Garante que fique acima do background */
+        z-index: 10;
         position: relative;
     }}
     .stTabs [data-baseweb="tab"] {{
@@ -85,9 +84,9 @@ st.markdown(f"""
         border: 1px solid #00E5FF !important;
     }}
 
-    /* 3. Mensagens de Chat (Native) */
+    /* 3. Mensagens de Chat */
     .stChatMessage {{
-        background-color: rgba(20, 20, 20, 0.85); /* Mais escuro para contraste */
+        background-color: rgba(20, 20, 20, 0.85);
         border: 1px solid #333;
         border-radius: 15px;
         margin-bottom: 10px;
@@ -153,6 +152,7 @@ def carregar_dados():
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client_gs = gspread.authorize(creds)
         sheet = client_gs.open("MYND_Finance_Bot").get_worksheet(0)
+        # expected_headers para garantir que pegamos tudo
         return pd.DataFrame(sheet.get_all_records())
     except:
         return pd.DataFrame()
@@ -250,24 +250,18 @@ st.markdown(f"""
 
 tab1, tab2 = st.tabs(["💬 AGENTE", "📊 DASHBOARD"])
 
-# --- ABA 1: CHAT CARIE (Com Background Imagem) ---
+# --- ABA 1: CHAT CARIE ---
 with tab1:
-    # 1. Injeção do Background Exclusivo para esta aba
     st.markdown(f"""
     <div style="
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
         background-image: url('data:image/png;base64,{bg_img}');
-        background-size: cover; 
-        background-position: center;
-        background-repeat: no-repeat;
-        z-index: 0; /* Fica atrás do conteúdo */
-        pointer-events: none; /* Não atrapalha cliques */
+        background-size: cover; background-position: center; background-repeat: no-repeat;
+        z-index: 0; pointer-events: none;
     "></div>
     """, unsafe_allow_html=True)
 
-    # Container para o Robô
     with st.container():
-        # URL do Robô (Certifique-se de que load_lottieurl está definida acima)
         lottie_robot = load_lottieurl("https://lottie.host/020d5e2e-2e4a-4497-b67e-2f943063f282/Gef2CSQ7Qh.json")
         col_anim, col_info = st.columns([1, 2])
         with col_anim:
@@ -282,30 +276,21 @@ with tab1:
 
     st.markdown("---")
 
-    # Chat
     chat_container = st.container()
     with chat_container:
         for msg in st.session_state.msgs:
             avatar_icon = carie_icon_path if msg["role"] == "assistant" else None
-            # Adicionei z-index para garantir que o chat fique sobre a imagem
             with st.chat_message(msg["role"], avatar=avatar_icon):
                 st.write(msg["content"])
 
     st.write("##")
     st.write("##")
 
-    # Microfone
     st.markdown('<div class="fixed-mic-wrapper"><div class="mic-btn-style">', unsafe_allow_html=True)
-    audio_bytes = audio_recorder(
-        text="",
-        recording_color="#ff0055",
-        neutral_color="#00E5FF",
-        icon_size="3x",
-        key="mic_main"
-    )
+    audio_bytes = audio_recorder(text="", recording_color="#ff0055", neutral_color="#00E5FF", icon_size="3x",
+                                 key="mic_main")
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # Lógica
     if audio_bytes:
         if "last_audio" not in st.session_state or st.session_state.last_audio != audio_bytes:
             st.session_state.last_audio = audio_bytes
@@ -353,42 +338,57 @@ with tab1:
 
                 st.rerun()
 
-# --- ABA 2: DASHBOARD (Fundo Preto Padrão) ---
+# --- ABA 2: DASHBOARD (Corrigido o Extrato) ---
 with tab2:
-    # AQUI NÃO TEM INJEÇÃO DE BACKGROUND, ENTÃO PEGA O GLOBAL (PRETO)
-    st.markdown('<div style="position:relative; z-index:10;">', unsafe_allow_html=True)  # Container seguro
-
+    st.markdown('<div style="position:relative; z-index:10;">', unsafe_allow_html=True)
     st_autorefresh(interval=30000, key="dash")
+
     df = carregar_dados()
     if not df.empty:
         try:
-            df['Valor'] = df['Valor'].apply(limpar_moeda)
-            df['Valor'] = pd.to_numeric(df['Valor'], errors='coerce').fillna(0)
+            # Identificação Inteligente de Colunas
+            # Verifica quais colunas realmente existem para não dar erro
+            cols = df.columns.tolist()
 
-            total = df['Valor'].sum()
+            # Tenta limpar valor se a coluna existir (Case Insensitive busca)
+            col_valor = next((c for c in cols if "valor" in c.lower()), None)
+            col_categoria = next((c for c in cols if "categoria" in c.lower()), None)
+            col_pagamento = next((c for c in cols if "pagamento" in c.lower()), None)
 
-            st.markdown(f"""
-            <div style="background:rgba(20,20,20,0.8); border:1px solid #333; padding:20px; border-radius:15px; text-align:center; margin-bottom:20px;">
-                <span style="color:#888; font-size:14px;">TOTAL GASTO</span><br>
-                <span style="color:#00E5FF; font-size:32px; font-family:monospace; font-weight:bold;">R$ {total:,.2f}</span>
-            </div>
-            """, unsafe_allow_html=True)
+            if col_valor:
+                df[col_valor] = df[col_valor].apply(limpar_moeda)
+                df[col_valor] = pd.to_numeric(df[col_valor], errors='coerce').fillna(0)
+                total = df[col_valor].sum()
 
-            c1, c2 = st.columns(2)
-            with c1:
-                fig = px.bar(df.groupby("Categoria")["Valor"].sum().reset_index(), x="Categoria", y="Valor",
-                             color="Valor", template="plotly_dark", color_continuous_scale=["#00E5FF", "#FF0055"])
-                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                                  margin=dict(t=30, l=0, r=0, b=0), showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
-            with c2:
-                fig = px.pie(df, names="Pagamento", values="Valor", hole=0.6, template="plotly_dark",
-                             color_discrete_sequence=["#00E5FF", "#FF0055", "#00FF41"])
-                fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=30, l=0, r=0, b=0), showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
+                st.markdown(f"""
+                <div style="background:rgba(20,20,20,0.8); border:1px solid #333; padding:20px; border-radius:15px; text-align:center; margin-bottom:20px;">
+                    <span style="color:#888; font-size:14px;">TOTAL GASTO</span><br>
+                    <span style="color:#00E5FF; font-size:32px; font-family:monospace; font-weight:bold;">R$ {total:,.2f}</span>
+                </div>
+                """, unsafe_allow_html=True)
 
-            st.markdown("##### Extrato")
-            st.dataframe(df.tail(10)[['Data/Hora', 'Item', 'Valor']], use_container_width=True, hide_index=True)
+                c1, c2 = st.columns(2)
+                if col_categoria:
+                    with c1:
+                        fig = px.bar(df.groupby(col_categoria)[col_valor].sum().reset_index(), x=col_categoria,
+                                     y=col_valor,
+                                     color=col_valor, template="plotly_dark",
+                                     color_continuous_scale=["#00E5FF", "#FF0055"])
+                        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                                          margin=dict(t=30, l=0, r=0, b=0), showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+                if col_pagamento:
+                    with c2:
+                        fig = px.pie(df, names=col_pagamento, values=col_valor, hole=0.6, template="plotly_dark",
+                                     color_discrete_sequence=["#00E5FF", "#FF0055", "#00FF41"])
+                        fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", margin=dict(t=30, l=0, r=0, b=0),
+                                          showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
+
+            st.markdown("##### Extrato Recente")
+            # MOSTRA TUDO SE NÃO ACHAR COLUNAS ESPECÍFICAS (Blindagem final)
+            st.dataframe(df.tail(10), use_container_width=True, hide_index=True)
 
         except Exception as e:
             st.error(f"Erro: {e}")
