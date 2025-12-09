@@ -86,7 +86,7 @@ st.markdown(f"""
 
     /* 3. Mensagens de Chat */
     .stChatMessage {{
-        background-color: rgba(20, 20, 20, 0.85);
+        background-color: rgba(255, 255, 255, 1);
         border: 1px solid #333;
         border-radius: 15px;
         margin-bottom: 10px;
