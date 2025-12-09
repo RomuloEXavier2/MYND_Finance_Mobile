@@ -43,7 +43,7 @@ def load_lottieurl(url: str):
         return None
 
 
-# --- CSS SUPREMO (CORREÇÃO DO POSICIONAMENTO) ---
+# --- CSS SUPREMO (COM AJUSTE DE MICROFONE) ---
 st.markdown(f"""
     <style>
     /* 1. Fundo Geral */
@@ -52,6 +52,7 @@ st.markdown(f"""
         color: #e0e0e0;
     }}
 
+    /* Remove elementos padrão */
     header, footer {{visibility: hidden;}}
     .block-container {{
         padding-top: 20px;
@@ -96,8 +97,7 @@ st.markdown(f"""
         color: black !important;
     }}
 
-    /* 4. CORREÇÃO CRÍTICA DO MICROFONE */
-    /* Isso pega o iframe do gravador e força ele para o fundo da tela */
+    /* 4. MICROFONE FIXO E CENTRALIZADO */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {{
         position: fixed !important;
         bottom: 30px !important;
@@ -105,20 +105,25 @@ st.markdown(f"""
         transform: translateX(-50%) !important;
         z-index: 99999 !important;
 
-        /* Estilo Neon e Black Piano */
-        background-color: #000000 !important; /* Mata a faixa branca */
+        /* Estilo da Bola Neon */
+        background-color: #000000 !important;
         border-radius: 50%;
         border: 2px solid #00E5FF;
         box-shadow: 0 0 25px rgba(0, 229, 255, 0.5);
 
-        /* Tamanho fixo para garantir o círculo */
+        /* Tamanho fixo do container */
         width: 70px !important;
         height: 70px !important;
+
+        /* AJUSTE FINO DE POSIÇÃO DO ÍCONE */
+        /* Mexa nestes valores se ainda estiver torto */
+        padding-top: 10px !important;
+        padding-left: 5px !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- CLIENTES ---
+# --- CLIENTES API ---
 api_key = st.secrets.get("OPENAI_API_KEY")
 client_ai = OpenAI(api_key=api_key)
 
@@ -240,8 +245,9 @@ st.markdown(f"""
 
 tab1, tab2 = st.tabs(["💬 AGENTE", "📊 DASHBOARD"])
 
-# --- ABA 1: CHAT CARIE ---
+# --- ABA 1: CARIE ---
 with tab1:
+    # Background Exclusivo
     st.markdown(f"""
     <div style="
         position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -276,8 +282,8 @@ with tab1:
     st.write("##")
     st.write("##")
 
-    # MICROFONE (Sem DIV wrapper, o CSS cuida da posição)
-    # Ajustei icon_size para caber no container de 70px
+    # MICROFONE (Fixo e Centralizado)
+    # Reduzi o icon_size para 2x para ele "caber" melhor dentro da bola de 70px
     audio_bytes = audio_recorder(
         text="",
         recording_color="#ff0055",
@@ -341,6 +347,7 @@ with tab2:
     df = carregar_dados()
     if not df.empty:
         try:
+            # Blindagem de Colunas
             cols = df.columns.tolist()
             col_valor = next((c for c in cols if "valor" in c.lower()), None)
             col_categoria = next((c for c in cols if "categoria" in c.lower()), None)
@@ -378,6 +385,7 @@ with tab2:
                         st.plotly_chart(fig, use_container_width=True)
 
             st.markdown("##### Extrato Recente")
+            # Mostra colunas seguras
             st.dataframe(df.tail(10), use_container_width=True, hide_index=True)
 
         except Exception as e:
