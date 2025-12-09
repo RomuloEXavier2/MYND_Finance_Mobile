@@ -86,11 +86,11 @@ st.markdown(f"""
 
     /* 3. Mensagens de Chat */
     .stChatMessage {{
-        background-color: rgba(255, 255, 255, 1);
+        background-color: rgba(20, 20, 20, 0.85);
         border: 1px solid #333;
         border-radius: 15px;
         margin-bottom: 10px;
-        backdrop-filter: blur(50px);
+        backdrop-filter: blur(5px);
         color: #ffffff !important;
     }}
     div[data-testid="chatAvatarIcon-user"] {{
