@@ -43,7 +43,7 @@ def load_lottieurl(url: str):
         return None
 
 
-# --- CSS SUPREMO ---
+# --- CSS SUPREMO (CORREÇÃO DO POSICIONAMENTO) ---
 st.markdown(f"""
     <style>
     /* 1. Fundo Geral */
@@ -52,7 +52,6 @@ st.markdown(f"""
         color: #e0e0e0;
     }}
 
-    /* Remove elementos padrão */
     header, footer {{visibility: hidden;}}
     .block-container {{
         padding-top: 20px;
@@ -97,32 +96,24 @@ st.markdown(f"""
         color: black !important;
     }}
 
-    /* 4. Microfone Flutuante */
-    .fixed-mic-wrapper {{
-        position: fixed;
-        bottom: 30px;
-        left: 0;
-        width: 100%;
-        display: flex;
-        justify-content: center;
-        z-index: 9999;
-        pointer-events: none;
-    }}
-    .mic-btn-style {{
-        pointer-events: auto;
-        background: rgba(0, 0, 0, 0.95);
-        border-radius: 50%;
-        padding: 15px;
-        box-shadow: 0 0 30px rgba(0, 229, 255, 0.4);
-        border: 2px solid #00E5FF;
-        transition: transform 0.2s;
-    }}
-    .mic-btn-style:active {{
-        transform: scale(0.95);
-    }}
-
+    /* 4. CORREÇÃO CRÍTICA DO MICROFONE */
+    /* Isso pega o iframe do gravador e força ele para o fundo da tela */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {{
-        background: transparent !important;
+        position: fixed !important;
+        bottom: 30px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        z-index: 99999 !important;
+
+        /* Estilo Neon e Black Piano */
+        background-color: #000000 !important; /* Mata a faixa branca */
+        border-radius: 50%;
+        border: 2px solid #00E5FF;
+        box-shadow: 0 0 25px rgba(0, 229, 255, 0.5);
+
+        /* Tamanho fixo para garantir o círculo */
+        width: 70px !important;
+        height: 70px !important;
     }}
     </style>
     """, unsafe_allow_html=True)
@@ -152,7 +143,6 @@ def carregar_dados():
             creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
         client_gs = gspread.authorize(creds)
         sheet = client_gs.open("MYND_Finance_Bot").get_worksheet(0)
-        # expected_headers para garantir que pegamos tudo
         return pd.DataFrame(sheet.get_all_records())
     except:
         return pd.DataFrame()
@@ -286,10 +276,15 @@ with tab1:
     st.write("##")
     st.write("##")
 
-    st.markdown('<div class="fixed-mic-wrapper"><div class="mic-btn-style">', unsafe_allow_html=True)
-    audio_bytes = audio_recorder(text="", recording_color="#ff0055", neutral_color="#00E5FF", icon_size="3x",
-                                 key="mic_main")
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    # MICROFONE (Sem DIV wrapper, o CSS cuida da posição)
+    # Ajustei icon_size para caber no container de 70px
+    audio_bytes = audio_recorder(
+        text="",
+        recording_color="#ff0055",
+        neutral_color="#00E5FF",
+        icon_size="2x",
+        key="mic_main"
+    )
 
     if audio_bytes:
         if "last_audio" not in st.session_state or st.session_state.last_audio != audio_bytes:
@@ -323,7 +318,7 @@ with tab1:
                     else:
                         ok, msg = salvar_na_nuvem(st.session_state.dados)
                         if ok:
-                            resp = f"Salvo: {st.session_state.dados['item']} (R$ {st.session_state.dados['valor']})"
+                            resp = f"Salvo! {st.session_state.dados['item']} de R$ {st.session_state.dados['valor']}."
                             st.session_state.dados = {}
                             st.balloons()
                         else:
@@ -338,7 +333,7 @@ with tab1:
 
                 st.rerun()
 
-# --- ABA 2: DASHBOARD (Corrigido o Extrato) ---
+# --- ABA 2: DASHBOARD ---
 with tab2:
     st.markdown('<div style="position:relative; z-index:10;">', unsafe_allow_html=True)
     st_autorefresh(interval=30000, key="dash")
@@ -346,11 +341,7 @@ with tab2:
     df = carregar_dados()
     if not df.empty:
         try:
-            # Identificação Inteligente de Colunas
-            # Verifica quais colunas realmente existem para não dar erro
             cols = df.columns.tolist()
-
-            # Tenta limpar valor se a coluna existir (Case Insensitive busca)
             col_valor = next((c for c in cols if "valor" in c.lower()), None)
             col_categoria = next((c for c in cols if "categoria" in c.lower()), None)
             col_pagamento = next((c for c in cols if "pagamento" in c.lower()), None)
@@ -387,7 +378,6 @@ with tab2:
                         st.plotly_chart(fig, use_container_width=True)
 
             st.markdown("##### Extrato Recente")
-            # MOSTRA TUDO SE NÃO ACHAR COLUNAS ESPECÍFICAS (Blindagem final)
             st.dataframe(df.tail(10), use_container_width=True, hide_index=True)
 
         except Exception as e:
