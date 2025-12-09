@@ -28,39 +28,48 @@ def get_base64_of_bin_file(bin_file):
         return ""
 
 
+# Carrega imagens em memória
 bg_img = get_base64_of_bin_file("assets/bg_mobile.png")
-# Não precisamos carregar carie_img em base64 para o st.chat_message, usamos o path direto ou Image object
-# Mas mantemos aqui caso precise pro CSS
 carie_icon_path = "assets/carie.png"
 logo_img = get_base64_of_bin_file("assets/logo_header.png")
 
-# --- CSS SUPREMO (REFATORADO PARA DESIGN LIMPO) ---
+
+# --- FUNÇÕES AUXILIARES (Corrigido: Adicionada a função que faltava) ---
+def load_lottieurl(url: str):
+    try:
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200: return None
+        return r.json()
+    except:
+        return None
+
+
+# --- CSS SUPREMO (GLOBAL) ---
 st.markdown(f"""
     <style>
-    /* 1. Fundo Geral */
+    /* 1. Fundo Geral: PRETO PURO (Padrão para o Dashboard) */
     .stApp {{
-        background-color: #000000;
-        background-image: url("data:image/png;base64,{bg_img}");
-        background-size: cover;
-        background-position: center;
-        background-attachment: fixed;
+        background-color: #000000 !important;
+        color: #e0e0e0;
     }}
 
     /* Remove elementos padrão */
     header, footer {{visibility: hidden;}}
     .block-container {{
         padding-top: 20px;
-        padding-bottom: 150px; /* Espaço generoso para o mic */
-        max-width: 800px; /* Limita largura no PC para parecer app mobile */
+        padding-bottom: 150px;
+        max-width: 800px;
     }}
 
-    /* 2. Abas Modernas (Estilo Reference) */
+    /* 2. Abas Modernas */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 10px;
-        background-color: rgba(0,0,0,0.5);
+        background-color: rgba(20,20,20,0.8);
         padding: 10px;
         border-radius: 15px;
         border: 1px solid #333;
+        z-index: 10; /* Garante que fique acima do background */
+        position: relative;
     }}
     .stTabs [data-baseweb="tab"] {{
         height: 40px;
@@ -76,21 +85,20 @@ st.markdown(f"""
         border: 1px solid #00E5FF !important;
     }}
 
-    /* 3. Ajuste das Mensagens de Chat (Native) */
-    /* Deixa o fundo das mensagens do assistente um pouco mais claro que o fundo */
+    /* 3. Mensagens de Chat (Native) */
     .stChatMessage {{
-        background-color: rgba(20, 20, 20, 0.8);
+        background-color: rgba(20, 20, 20, 0.85); /* Mais escuro para contraste */
         border: 1px solid #333;
         border-radius: 15px;
         margin-bottom: 10px;
+        backdrop-filter: blur(5px);
     }}
-    /* Mensagem do usuário com destaque sutil */
     div[data-testid="chatAvatarIcon-user"] {{
         background-color: #00E5FF !important;
         color: black !important;
     }}
 
-    /* 4. Microfone Flutuante (Design Limpo) */
+    /* 4. Microfone Flutuante */
     .fixed-mic-wrapper {{
         position: fixed;
         bottom: 30px;
@@ -99,23 +107,21 @@ st.markdown(f"""
         display: flex;
         justify-content: center;
         z-index: 9999;
-        pointer-events: none; /* Permite clique através da área vazia */
+        pointer-events: none;
     }}
     .mic-btn-style {{
         pointer-events: auto;
-        background: rgba(0, 0, 0, 0.9); /* Fundo quase preto */
+        background: rgba(0, 0, 0, 0.95);
         border-radius: 50%;
         padding: 15px;
-        box-shadow: 0 0 30px rgba(0, 229, 255, 0.3); /* Glow Azul Suave */
+        box-shadow: 0 0 30px rgba(0, 229, 255, 0.4);
         border: 2px solid #00E5FF;
         transition: transform 0.2s;
     }}
     .mic-btn-style:active {{
         transform: scale(0.95);
-        box-shadow: 0 0 50px rgba(0, 229, 255, 0.6);
     }}
 
-    /* Esconde iframe do gravador */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {{
         background: transparent !important;
     }}
@@ -204,7 +210,7 @@ def falar(texto):
 
 def processar_gpt(texto):
     if "dados" not in st.session_state: st.session_state.dados = {}
-    ctx = f"Dados atuais: {json.dumps(st.session_state.dados, ensure_ascii=False)}"
+    ctx = f"Dados parciais: {json.dumps(st.session_state.dados, ensure_ascii=False)}"
     prompt = f"""You are Carie (MYND). Extract data. {ctx}. User: "{texto}".
     JSON: {{"item":null,"valor":null,"categoria":null,"pagamento":null,"recorrencia":"Único","local_compra":null,"missing_info":null,"cancelar":false}}
     Rules: 'Compras' needs local_compra. If missing info, ASK in 'missing_info' (Portuguese)."""
@@ -244,40 +250,51 @@ st.markdown(f"""
 
 tab1, tab2 = st.tabs(["💬 AGENTE", "📊 DASHBOARD"])
 
-# --- ABA 1: CHAT LIMPO (Reference Style) ---
+# --- ABA 1: CHAT CARIE (Com Background Imagem) ---
 with tab1:
-    # Container para o Robô (Topo, estilo cartão)
+    # 1. Injeção do Background Exclusivo para esta aba
+    st.markdown(f"""
+    <div style="
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background-image: url('data:image/png;base64,{bg_img}');
+        background-size: cover; 
+        background-position: center;
+        background-repeat: no-repeat;
+        z-index: 0; /* Fica atrás do conteúdo */
+        pointer-events: none; /* Não atrapalha cliques */
+    "></div>
+    """, unsafe_allow_html=True)
+
+    # Container para o Robô
     with st.container():
+        # URL do Robô (Certifique-se de que load_lottieurl está definida acima)
         lottie_robot = load_lottieurl("https://lottie.host/020d5e2e-2e4a-4497-b67e-2f943063f282/Gef2CSQ7Qh.json")
         col_anim, col_info = st.columns([1, 2])
         with col_anim:
             if lottie_robot: st_lottie(lottie_robot, height=120, key="robot")
         with col_info:
             st.markdown("""
-            <div style="padding-top:20px;">
+            <div style="padding-top:20px; position: relative; z-index: 10;">
                 <p style="color:#888; font-size:12px; margin:0;">STATUS DO SISTEMA</p>
                 <p style="color:#00FF41; font-size:14px; font-weight:bold;">● ONLINE</p>
-                <p style="color:#ccc; font-size:14px;">"Estou ouvindo. Clique abaixo para registrar."</p>
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("---")  # Divisor sutil
+    st.markdown("---")
 
-    # Container de Chat (Nativo do Streamlit)
+    # Chat
     chat_container = st.container()
     with chat_container:
         for msg in st.session_state.msgs:
-            # Define o avatar correto
             avatar_icon = carie_icon_path if msg["role"] == "assistant" else None
-
+            # Adicionei z-index para garantir que o chat fique sobre a imagem
             with st.chat_message(msg["role"], avatar=avatar_icon):
                 st.write(msg["content"])
 
-    # Espaçador
     st.write("##")
     st.write("##")
 
-    # MICROFONE (Fixo embaixo)
+    # Microfone
     st.markdown('<div class="fixed-mic-wrapper"><div class="mic-btn-style">', unsafe_allow_html=True)
     audio_bytes = audio_recorder(
         text="",
@@ -288,20 +305,16 @@ with tab1:
     )
     st.markdown('</div></div>', unsafe_allow_html=True)
 
-    # Lógica de Processamento
+    # Lógica
     if audio_bytes:
         if "last_audio" not in st.session_state or st.session_state.last_audio != audio_bytes:
             st.session_state.last_audio = audio_bytes
 
-            # 1. Transcreve
             with st.spinner("Ouvindo..."):
                 txt = transcrever(audio_bytes)
 
             if txt and len(txt) > 2:
-                # Adiciona mensagem do usuário na hora
                 st.session_state.msgs.append({"role": "user", "content": txt})
-
-                # Processa IA
                 dados = processar_gpt(txt)
                 resp = ""
 
@@ -331,7 +344,6 @@ with tab1:
                         else:
                             resp = f"Erro: {msg}"
 
-                # Adiciona resposta e toca áudio
                 st.session_state.msgs.append({"role": "assistant", "content": resp})
                 mp3 = falar(resp)
                 if mp3:
@@ -341,8 +353,11 @@ with tab1:
 
                 st.rerun()
 
-# --- ABA 2: DASHBOARD (Mantido igual) ---
+# --- ABA 2: DASHBOARD (Fundo Preto Padrão) ---
 with tab2:
+    # AQUI NÃO TEM INJEÇÃO DE BACKGROUND, ENTÃO PEGA O GLOBAL (PRETO)
+    st.markdown('<div style="position:relative; z-index:10;">', unsafe_allow_html=True)  # Container seguro
+
     st_autorefresh(interval=30000, key="dash")
     df = carregar_dados()
     if not df.empty:
@@ -379,3 +394,5 @@ with tab2:
             st.error(f"Erro: {e}")
     else:
         st.info("Sem dados.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
