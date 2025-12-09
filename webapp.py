@@ -91,6 +91,7 @@ st.markdown(f"""
         border-radius: 15px;
         margin-bottom: 10px;
         backdrop-filter: blur(5px);
+        color: #ffffff !important;
     }}
     div[data-testid="chatAvatarIcon-user"] {{
         background-color: #00E5FF !important;
