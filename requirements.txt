@@ -10,3 +10,5 @@ oauth2client
 pandas
 requests
 elevenlabs
+google-api-python-client
+bcrypt
