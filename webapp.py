@@ -6,6 +6,8 @@ import tempfile
 import base64
 import requests
 import bcrypt
+import time  # <--- GARANTIDO AQUI
+from datetime import datetime  # <--- GARANTIDO AQUI
 import plotly.express as px
 from openai import OpenAI
 from audio_recorder_streamlit import audio_recorder
@@ -36,11 +38,11 @@ carie_icon_path = "assets/carie.png"
 logo_img = get_base64_of_bin_file("assets/logo_header.png")
 
 # --- CONSTANTES ---
-# URL Base exata que você pediu (já aponta para a pasta MYND_Finance)
+# URL do Firebase
 FIREBASE_URL = "https://mynd-e958a-default-rtdb.firebaseio.com/MYND_Finance"
 
-# ID da Planilha Modelo (Crie uma planilha vazia no seu Drive e cole o ID aqui)
-# O sistema vai copiar essa planilha para cada novo usuário registrado.
+# ID DA PLANILHA MODELO (TEMPLATE)
+# IMPORTANTE: Você COMPARTILHOU essa planilha com o email do robô (client_email)?
 TEMPLATE_SHEET_ID = "1UyR7ng84daDRIm2pj2t_aBs62ROcypM3yP-nfz6djww"
 
 
@@ -61,10 +63,7 @@ def get_google_creds():
 
 
 def firebase_db(path, method="GET", data=None):
-    """Gerenciador de Conexão com Firebase"""
-    # Monta a URL: https://.../MYND_Finance/users/romulo.json
     url = f"{FIREBASE_URL}/{path}.json"
-
     try:
         if method == "GET":
             response = requests.get(url)
@@ -83,27 +82,28 @@ def firebase_db(path, method="GET", data=None):
 def criar_planilha_usuario(username):
     """Cria uma cópia da planilha modelo para o usuário"""
     try:
-        if TEMPLATE_SHEET_ID == "COLOQUE_O_ID_DA_SUA_PLANILHA_MODELO_AQUI":
-            st.error("Erro Config: ID do Template não definido no código.")
-            return None
-
         creds = get_google_creds()
         service = build('drive', 'v3', credentials=creds)
 
         # Copia o Template
         body = {'name': f'MYND_Finance_{username}'}
+
+        # Tenta copiar (Aqui dava o erro 404 se não compartilhado)
         drive_response = service.files().copy(
             fileId=TEMPLATE_SHEET_ID, body=body).execute()
 
         new_sheet_id = drive_response.get('id')
+
+        # Opcional: Compartilhar a nova planilha com um email real (se tivermos)
+        # Para simplificar, o robô é o dono e o app usa o robô para ler/escrever.
+
         return new_sheet_id
     except Exception as e:
-        st.error(f"Erro ao criar planilha: {e}")
+        st.error(f"Erro Drive API: {e}. Verifique se compartilhou o Template com o robô!")
         return None
 
 
 def autenticar(user, password):
-    # Busca dados do usuário: users/nome_usuario
     user_data = firebase_db(f"users/{user}")
 
     if not user_data:
@@ -112,12 +112,13 @@ def autenticar(user, password):
     stored_pass = user_data.get('password')
     pass_ok = False
 
-    # Verifica Senha (Hash ou Texto)
     try:
+        # Verifica se é hash bcrypt
         if bcrypt.checkpw(password.encode(), stored_pass.encode()):
             pass_ok = True
     except:
-        if str(password) == str(stored_pass):  # Fallback para legado
+        # Fallback texto plano
+        if str(password) == str(stored_pass):
             pass_ok = True
 
     if not pass_ok:
@@ -126,45 +127,43 @@ def autenticar(user, password):
     if user_data.get('status') != "ATIVO":
         return False, "Conta inativa.", None
 
-    # Verifica/Cria Planilha
+    # Verifica se tem planilha vinculada
     if not user_data.get('sheet_id'):
-        with st.spinner("Primeiro acesso: Criando seu banco de dados..."):
+        with st.spinner("Primeiro acesso: Configurando banco de dados..."):
             new_id = criar_planilha_usuario(user)
             if new_id:
                 user_data['sheet_id'] = new_id
-                # Atualiza no Firebase
                 firebase_db(f"users/{user}", "PATCH", {"sheet_id": new_id})
             else:
-                return False, "Erro crítico ao gerar planilha.", None
+                return False, "Falha ao criar planilha. Contate suporte.", None
 
     return True, "Login realizado!", user_data
 
 
 def registrar(user, password, nome):
-    # Verifica duplicidade
     if firebase_db(f"users/{user}"):
         return False, "Usuário já existe."
 
-    # Cria Hash
     hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
-    # Estrutura do Novo Usuário
+    # CORREÇÃO DO ERRO DE TIME: Usando datetime agora
+    data_hoje = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     new_user = {
         "password": hashed,
         "name": nome,
         "status": "ATIVO",
         "role": "user",
-        "sheet_id": "",  # Será preenchido no primeiro login
-        "created_at": time.strftime("%Y-%m-%d %H:%M:%S")
+        "sheet_id": "",
+        "created_at": data_hoje
     }
 
-    # Salva no Firebase
     res = firebase_db(f"users/{user}", "PUT", new_user)
 
     if res:
-        return True, "Conta criada com sucesso! Faça login."
+        return True, "Conta criada! Faça login."
     else:
-        return False, "Erro ao conectar no banco de dados."
+        return False, "Erro ao conectar no banco."
 
 
 # ==========================================
@@ -172,10 +171,8 @@ def registrar(user, password, nome):
 # ==========================================
 st.markdown(f"""
     <style>
-    /* Fundo Geral */
     .stApp {{ background-color: #000000 !important; color: #e0e0e0; }}
 
-    /* Login Container */
     .login-box {{
         background: rgba(10,10,10,0.95);
         border: 1px solid #333;
@@ -185,32 +182,19 @@ st.markdown(f"""
         text-align: center;
     }}
 
-    /* Inputs */
     .stTextInput input {{
-        background-color: #111 !important;
-        color: white !important;
-        border: 1px solid #333 !important;
-        border-radius: 10px !important;
+        background-color: #111 !important; color: white !important;
+        border: 1px solid #333 !important; border-radius: 10px !important;
     }}
 
-    /* Botões */
     div[data-testid="stFormSubmitButton"] button {{
-        background-color: #00E5FF !important;
-        color: black !important;
-        border-radius: 10px !important;
-        border: none !important;
-        font-weight: bold !important;
-        transition: 0.3s;
-    }}
-    div[data-testid="stFormSubmitButton"] button:hover {{
-        box-shadow: 0 0 15px #00E5FF;
+        background-color: #00E5FF !important; color: black !important;
+        border-radius: 10px !important; border: none !important; font-weight: bold !important;
     }}
 
-    /* Abas */
     .stTabs [data-baseweb="tab-list"] {{ border-bottom: 1px solid #333; }}
     .stTabs [aria-selected="true"] {{ border: 1px solid #00E5FF !important; color: #00E5FF !important; }}
 
-    /* Chat & Dashboard */
     header, footer {{visibility: hidden;}}
     .block-container {{ padding-top: 10px; padding-bottom: 120px; }}
     .stChatMessage {{ background-color: rgba(20, 20, 20, 0.85); border: 1px solid #333; }}
@@ -228,18 +212,13 @@ st.markdown(f"""
     """, unsafe_allow_html=True)
 
 # ==========================================
-# LÓGICA DE SESSÃO
+# FLUXO DE LOGIN
 # ==========================================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.user_data = {}
 
-# ==========================================
-# TELA DE LOGIN / REGISTRO
-# ==========================================
 if not st.session_state.logged_in:
-
-    # Logo e Título
     st.markdown(f"""
     <div style="text-align:center; margin-top:40px; margin-bottom:20px;">
         <img src="data:image/png;base64,{logo_img}" style="height:50px;">
@@ -281,17 +260,14 @@ if not st.session_state.logged_in:
                         st.error(msg)
         st.markdown('</div>', unsafe_allow_html=True)
 
-    st.stop()  # Bloqueia o resto do app
+    st.stop()
 
 # ==========================================
-# ÁREA LOGADA (CARIE + DASHBOARD)
+# ÁREA LOGADA
 # ==========================================
-
-# ID Dinâmico da Planilha do Usuário
 SHEET_ID = st.session_state.user_data.get('sheet_id')
 
 
-# Funções de Dados (Usando SHEET_ID do usuário)
 @st.cache_data(ttl=10)
 def carregar_dados():
     try:
@@ -309,7 +285,6 @@ def salvar_na_nuvem(dados):
         client_gs = gspread.authorize(creds)
         sheet = client_gs.open_by_key(SHEET_ID).get_worksheet(0)
 
-        from datetime import datetime
         ts = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         cat = dados.get("categoria")
         if cat == "Compras" and dados.get("local_compra") == "Online": cat = "Compras Online"
@@ -336,7 +311,6 @@ except:
     AUDIO_AVAILABLE = False
 
 
-# Funções Auxiliares (Transcrever, Falar, GPT)
 def transcrever(audio_bytes):
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as fp:
         fp.write(audio_bytes)
@@ -393,13 +367,13 @@ def limpar_moeda(v):
     return v
 
 
-# --- HEADER E LOGOUT ---
+# --- APP START ---
 col_h1, col_h2 = st.columns([4, 1])
 with col_h1:
     st.markdown(f"""
     <div style="display:flex; align-items:center; margin-bottom:10px;">
         <img src="data:image/png;base64,{logo_img}" style="height:35px; margin-right:10px;">
-        <h3 style="color:#00E5FF; margin:0; font-family:sans-serif;">MYND Finance</h3>
+        <h3 style="color:#00E5FF; margin:0;">MYND Finance</h3>
     </div>
     """, unsafe_allow_html=True)
 with col_h2:
@@ -410,17 +384,16 @@ with col_h2:
 
 st.caption(f"Usuário: {st.session_state.user_data.get('name', 'Convidado')}")
 
-# --- INÍCIO DO APP (MANTIDO IDÊNTICO AO ANTERIOR) ---
 if "msgs" not in st.session_state:
     st.session_state.msgs = [{"role": "assistant", "content": "Olá! Sou a Carie. Vamos lançar gastos?"}]
 
 tab1, tab2 = st.tabs(["💬 AGENTE", "📊 DASHBOARD"])
 
-# ABA 1 (CARIE)
 with tab1:
     st.markdown(
         f"""<div style="position:fixed; top:0; left:0; width:100%; height:100%; background-image:url('data:image/png;base64,{bg_img}'); background-size:cover; z-index:0; pointer-events:none;"></div>""",
         unsafe_allow_html=True)
+
     with st.container():
         lottie_robot = load_lottieurl("https://lottie.host/020d5e2e-2e4a-4497-b67e-2f943063f282/Gef2CSQ7Qh.json")
         c1, c2 = st.columns([1, 2])
@@ -483,7 +456,6 @@ with tab1:
                         unsafe_allow_html=True)
                 st.rerun()
 
-# ABA 2 (DASHBOARD)
 with tab2:
     st.markdown('<div style="position:relative; z-index:10;">', unsafe_allow_html=True)
     st_autorefresh(interval=30000)
